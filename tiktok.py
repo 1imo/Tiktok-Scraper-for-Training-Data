@@ -10,21 +10,19 @@ from tiktok_uploader.auth import AuthBackend
 
 class Tiktok:
     def __init__(self, cookie_path: str) -> None:
-        driver = webdriver.Chrome()
+        options = webdriver.ChromeOptions()
+        # options.add_argument("--headless")
+        driver = webdriver.Chrome(options=options)
         auth_backend = AuthBackend(cookies=cookie_path)
         self.driver = auth_backend.authenticate_agent(driver)
 
     def scrape(
-        self,
-        query: str,
-        output_path: str = "scraped_results.json",
-        target_results: int = 10,
+        self, query: str, scraped_results: list, target_results: int = 10
     ) -> None:
         query = urllib.parse.quote(query)
         url = f"https://www.tiktok.com/search?q={query}"
         self.driver.get(url)
 
-        scraped_results = []
         result_count = 0
         last_height = self.driver.execute_script("return document.body.scrollHeight")
 
@@ -39,13 +37,11 @@ class Tiktok:
                         By.CSS_SELECTOR, "div.css-1iy6zew-DivContainer.ejg0rhn0"
                     )
                     caption = caption_element.text.strip()
-
-                    if caption:
+                    if caption and caption not in scraped_results:
                         scraped_results.append(caption)
                         result_count += 1
-
-                    if result_count >= target_results:
-                        break
+                        if result_count >= target_results:
+                            break
                 except Exception as e:
                     print(f"Error: {e}")
                     continue
@@ -61,16 +57,28 @@ class Tiktok:
             new_height = self.driver.execute_script("return document.body.scrollHeight")
             if new_height == last_height:
                 break
-
             last_height = new_height
+
+    def scrape_multiple_queries(
+        self,
+        queries: list,
+        output_path: str = "scraped_results.json",
+        target_results: int = 10,
+    ) -> None:
+        scraped_results = []
+
+        for i, query in enumerate(queries):
+            print(f"Scraping query {i + 1}/{len(queries)}")
+            self.scrape(query, scraped_results, target_results)
 
         with open(output_path, "w", encoding="utf-8") as file:
             json.dump(scraped_results, file, ensure_ascii=False, indent=4)
 
-        print(f"Scraped {len(scraped_results)} results.")
+        print(f"Scraped {len(scraped_results)} unique results.")
         self.driver.quit()
 
 
 if __name__ == "__main__":
     tiktok = Tiktok(cookie_path="../config/cookies.txt")
-    tiktok.scrape(query="cars", target_results=5000)
+    queries = ["car", "vehicle"]
+    tiktok.scrape_multiple_queries(queries, target_results=2)
